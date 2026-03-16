@@ -1,0 +1,15 @@
+RDS/
+Reports/
+.Rhistory
+.RData
+
+# Quarto transient output
+.quarto/
+*_files/
+*_cache/
+
+# Shiny/temp runtime output
+shiny-output/
+shiny-logs/
+tmp/
+temp/
