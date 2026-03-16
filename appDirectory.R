@@ -4,7 +4,7 @@
 #                App Directory               #
 #--------------------------------------------#
 
-R_FILES_DIR <- "R Files"
+R_FILES_DIR <- "R"
 RDS_DIR     <- "RDS"
 REPORTS_DIR <- "Reports"   
 

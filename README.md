@@ -1,93 +1,221 @@
-# HIR
+# MSD Shiny QC
 
+MSD Shiny QC is an R Shiny dashboard for reviewing MSD assay Excel exports, validating the expected workbook structure, joining assay cutoff tables, and generating plate-level QC outputs.
 
+The app currently supports multiple teams and workflows:
 
-## Getting started
+- `HIR`
+- `IVYBivalent`
+- `Sam5k50k`
+- `VRI`
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+For `HIR`, the app renders per-plate HTML QC reports with view/download links in the dashboard. For the other teams, the app prepares QC output for Excel export.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## What the app does
 
-## Add your files
+The application is built around a fixed MSD workbook format and a two-tab workflow:
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+- `QC Report`
+  - Upload one experiment `.xlsx` file
+  - Validate workbook sheets and required columns
+  - Parse experiment metadata, reagent metadata, and plate metadata
+  - Join signal and MSD cutoff tables
+  - Build merged raw data for review and download
+  - Run team-specific QC logic
+  - Generate HTML reports for `HIR` or downloadable QC Excel output for other teams
+- `Append Files`
+  - Upload multiple experiment `.xlsx` files
+  - Optionally remove duplicate rows
+  - Preview the appended table
+  - Download the combined Excel output
 
+## Required input files
+
+### Experiment workbook
+
+The main upload file must be an Excel workbook (`.xlsx`) with these required sheets:
+
+- `Exp_Data_Tbl`
+- `Experiment_Info`
+
+The validation logic in [R/validate_excel.R](C:/Users/sty4/OneDrive%20-%20CDC/Serology/MSDShinyQC_GitHub/R/validate_excel.R) expects `Exp_Data_Tbl` to contain, at minimum, the following columns:
+
+- `Assay`
+- `Sample Group`
+- `Sample`
+- `Dilution`
+- `Well`
+- `Spot`
+- `Calc. Concentration`
+- `Calc. Conc. Mean`
+- `Concentration`
+- `Detection Range`
+- `Signal`
+- `Mean`
+- `Std. Deviation`
+- `CV`
+- `% Recovery`
+- `% Recovery Mean`
+- `Calc. Conc. Std. Deviation`
+- `Calc. Conc. CV`
+- `Detection Limits: Calc. Low`
+- `Detection Limits: Calc. High`
+- `Excluded`
+- `Fit Statistic: RSquared`
+- `Plate Name`
+
+The `Experiment_Info` sheet is expected to include these sections in the current layout:
+
+- Section 1: experiment metadata
+- Section 2: reagents, lot numbers, and expiry dates
+- Section 3: plate barcodes and read times
+
+### Cutoff workbook
+
+The app also expects a cutoff workbook at:
+
+- `Data/Signal and MSD Cutoffs.xlsx`
+
+That workbook must contain these sheets:
+
+- `Signal_Cut_Offs`
+- `MSD_Cut_Offs`
+
+These datasets are loaded in [R/msdsigdata.R](C:/Users/sty4/OneDrive%20-%20CDC/Serology/MSDShinyQC_GitHub/R/msdsigdata.R) and joined into the uploaded experiment data based on plate type, antibody, assay, and sample where applicable.
+
+## Repo structure
+
+Current repository layout:
+
+```text
+MSDShinyQC_GitHub/
+|-- app.R
+|-- appDirectory.R
+|-- HTML.qmd
+|-- PDF.qmd
+|-- styles.css
+|-- README.md
+`-- R/
+    |-- DataTable.R
+    |-- DataTable_IVYBivalent.R
+    |-- DataTable_Sam5K50K.R
+    |-- DataTable_VRI.R
+    |-- helpers.R
+    |-- msdsigdata.R
+    |-- packages.R
+    |-- process_excel_files.R
+    |-- run_qc.R
+    |-- set_path.R
+    |-- shiny_quarto_safety.R
+    `-- validate_excel.R
 ```
-cd existing_repo
-git remote add origin https://git.biotech.cdc.gov/sty4/hir.git
-git branch -M main
-git push -uf origin main
+
+Runtime-generated directories are created automatically by [appDirectory.R](C:/Users/sty4/OneDrive%20-%20CDC/Serology/MSDShinyQC_GitHub/appDirectory.R):
+
+- `RDS/`
+- `Reports/`
+
+Additional paths defined in [R/set_path.R](C:/Users/sty4/OneDrive%20-%20CDC/Serology/MSDShinyQC_GitHub/R/set_path.R):
+
+- `Data 2025/`
+- `Reports/`
+
+## How to run the app
+
+### Prerequisites
+
+- R installed locally
+- Quarto installed and available to R
+- Required R packages installed
+- The cutoff workbook present at `Data/Signal and MSD Cutoffs.xlsx`
+
+The package load list is maintained in [R/packages.R](C:/Users/sty4/OneDrive%20-%20CDC/Serology/MSDShinyQC_GitHub/R/packages.R). It includes packages such as:
+
+- `shiny`
+- `bs4Dash`
+- `DT`
+- `dplyr`
+- `tidyr`
+- `readxl`
+- `openxlsx`
+- `quarto`
+- `kableExtra`
+- `shinyWidgets`
+- `shinyalert`
+
+### Start the app from R
+
+From the repository root:
+
+```r
+source("app.R")
+shiny::runApp()
 ```
 
-## Integrate with your tools
+Or directly:
 
-- [ ] [Set up project integrations](https://git.biotech.cdc.gov/sty4/hir/-/settings/integrations)
+```r
+shiny::runApp(".")
+```
 
-## Collaborate with your team
+## Processing flow
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+The main app logic lives in [app.R](C:/Users/sty4/OneDrive%20-%20CDC/Serology/MSDShinyQC_GitHub/app.R).
 
-## Test and Deploy
+When a user uploads a workbook and runs QC, the app does the following:
 
-Use the built-in continuous integration in GitLab.
+1. Validates the workbook structure with `validate_msd_file()`.
+2. Parses the workbook with `process_excel_files()`.
+3. Extracts:
+   - Section 1 experiment metadata
+   - Section 2 reagent and lot metadata
+   - Section 3 plate-level metadata
+4. Joins MSD and signal cutoff tables.
+5. Builds the merged raw data table shown in the UI.
+6. Selects the team-specific QC script.
+7. Partitions the merged data by antibody and plate.
+8. Saves intermediate RDS objects to `RDS/`.
+9. Generates report outputs or downloadable QC data.
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+## How reports are generated
 
-***
+Report generation is orchestrated in [R/run_qc.R](C:/Users/sty4/OneDrive%20-%20CDC/Serology/MSDShinyQC_GitHub/R/run_qc.R).
 
-# Editing this README
+For `HIR`:
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+- The app builds per-plate QC tables using `DataTableFunc`.
+- Per-plate intermediate objects are written to `RDS/`.
+- The app renders [HTML.qmd](C:/Users/sty4/OneDrive%20-%20CDC/Serology/MSDShinyQC_GitHub/HTML.qmd) with Quarto.
+- Rendered HTML files are copied into `Reports/`.
+- The dashboard displays `View` and `Download` links for each generated plate report.
 
-## Suggestions for a good README
+Each HTML report includes:
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+- Experiment name
+- Experiment date
+- Plate ID
+- User ID
+- Generated timestamp
+- Plate-level QC summary
+- Experiment metadata
+- Reagent and lot information
+- Plate metadata summary
+- Controls table
+- Standards table
+- Unknowns table
 
-## Name
-Choose a self-explaining name for your project.
+The repository also contains [PDF.qmd](C:/Users/sty4/OneDrive%20-%20CDC/Serology/MSDShinyQC_GitHub/PDF.qmd), which is a PDF report template for the same data model, although the current `HIR` flow renders HTML.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+## Output files
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+The app can generate:
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+- Merged raw data downloads as `.xlsx`, `.csv`, or `.rds`
+- QC Excel output for non-`HIR` teams
+- HTML QC reports in `Reports/`
+- Intermediate RDS files in `RDS/`
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+## Notes
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+- The current `README` reflects the repository as it exists now, including the `R/` source directory and current runtime paths.
+- Generated directories such as `RDS/` and `Reports/` are not source code and should generally be excluded from version control in future cleanup.
