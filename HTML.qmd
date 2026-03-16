@@ -1,0 +1,209 @@
+---
+title: "MSD QC Report"
+format:
+  html:
+    df-print: paged
+    toc: true
+    toc-depth: 2
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+params:
+  ab:                null
+  plate:             null
+  s1_raw_path:       null
+  s2_raw_path:       null
+  s3_processed_path: null
+  data_path:         null
+  user_id:           null
+  analyzed_on:       null
+  experiment_name:   "N/A"
+  experiment_date:   "N/A"
+---
+
+```{r setup}
+# Setup & helpers ----
+
+suppressPackageStartupMessages({
+  library(knitr)
+  library(kableExtra)
+  library(htmltools)
+})
+
+`%||%` <- function(x, y) {
+  if (is.null(x) || length(x) == 0 || (is.character(x) && !nzchar(x))) y else x
+}
+
+safe_read <- function(p) {
+  if (is.null(p) || !nzchar(p)) return(NULL)
+  p <- normalizePath(p, winslash = "/", mustWork = FALSE)
+  if (!file.exists(p)) return(NULL)
+  tryCatch(readRDS(p), error = function(e) NULL)
+}
+
+# Standard table renderer - returns an HTML kable or a "not available" notice
+kblx <- function(df, caption = NULL, digits = 3, align = "l", ...) {
+  if (is.null(df) || !is.data.frame(df) || nrow(df) == 0) {
+    return(HTML("<p><em>Not available.</em></p>"))
+  }
+  knitr::kable(
+    df,
+    format  = "html",
+    caption = caption,
+    digits  = digits,
+    align   = align,
+    ...
+  ) |>
+    kableExtra::kable_styling(
+      bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+      full_width        = FALSE
+    )
+}
+
+
+# Load RDS inputs ----
+
+s1_raw       <- safe_read(params$s1_raw_path)
+s2_raw       <- safe_read(params$s2_raw_path)
+s3_processed <- safe_read(params$s3_processed_path)
+tables       <- safe_read(params$data_path)
+
+
+# Pull individual QC tables ----
+
+table_names <- if (is.list(tables) && length(tables) > 0) tolower(names(tables)) else character(0)
+
+pull_table <- function(nm) {
+  idx <- which(table_names == tolower(nm))
+  if (length(idx) == 0) return(NULL)
+  tables[[idx[1]]]
+}
+
+tbl_controls  <- pull_table("controls")
+tbl_standards <- pull_table("standards")
+tbl_unknowns  <- pull_table("unknowns")
+tbl_qc        <- pull_table("qc")
+```
+
+**Experiment:** `r params$experiment_name %||% "N/A"`  
+**Date:** `r params$experiment_date %||% "N/A"`  
+**Plate:** `r params$plate %||% "N/A"`  
+**User:** `r params$user_id %||% "N/A"`  
+**Generated:** `r format(Sys.time(), "%d %b %Y, %I:%M:%S %p")`
+
+---
+
+## Plate-Level QC Summary
+
+```{r qc-badge, results='asis'}
+# Render a coloured PASS / REPEAT badge ----
+
+badge <- function(text, cls) {
+  HTML(sprintf(
+    '<span class="badge bg-%s" style="font-size:1rem; padding:.5em 1em;">%s</span>',
+    cls, text
+  ))
+}
+
+if (is.data.frame(tbl_qc) && nrow(tbl_qc) > 0) {
+  # Column is named Plate_QC (set by DataTableFunc)
+  qc_value <- toupper(as.character(tbl_qc$Plate_QC[1]))
+  if      (qc_value == "PASS")   cat(as.character(badge("PASS",   "success")))
+  else if (qc_value == "REPEAT") cat(as.character(badge("REPEAT", "danger")))
+  else                           cat(as.character(badge("N/A",    "secondary")))
+} else {
+  cat(as.character(HTML("<p><em>QC table not provided.</em></p>")))
+}
+```
+
+---
+
+## Experiment Metadata (Section 1)
+
+```{r section-1, results='asis'}
+# Display s1_raw - experiment-level info (name, date, user, plate type) ----
+
+if (is.data.frame(s1_raw) && nrow(s1_raw) > 0) {
+  kblx(s1_raw)
+} else {
+  HTML("<p><em>No experiment metadata available (s1_raw missing or empty).</em></p>")
+}
+```
+
+---
+
+## Reagents and Lot Information (Section 2)
+
+```{r section-2, results='asis'}
+# Display s2_raw - reagent names, lot numbers, and expiry dates ----
+
+if (is.data.frame(s2_raw) && nrow(s2_raw) > 0) {
+  kblx(s2_raw)
+} else {
+  HTML("<p><em>No reagents / lot information available (s2_raw missing or empty).</em></p>")
+}
+```
+
+---
+
+## Plate Metadata Summary (Section 3)
+
+```{r section-3, results='asis'}
+# Display s3_processed - per-plate barcodes, read times, serial numbers ----
+
+if (is.data.frame(s3_processed) && nrow(s3_processed) > 0) {
+  kblx(s3_processed)
+} else {
+  HTML("<p><em>No plate metadata summary available (s3_processed missing or empty).</em></p>")
+}
+```
+
+---
+
+## Controls
+
+```{r controls, results='asis'}
+# Controls table (negative + positive) with Analyte_QC and Sample_QC ----
+
+df <- tryCatch(as.data.frame(tbl_controls), error = function(e) NULL)
+
+if (is.data.frame(df) && nrow(df) > 0) {
+  kblx(df, caption = "Controls")
+} else {
+  HTML("<p><em>No data in Controls table.</em></p>")
+}
+```
+
+---
+
+## Standards
+
+```{r standards, results='asis'}
+# Standards table with recovery, CV, and F-statistic QC flags ----
+
+df <- tryCatch(as.data.frame(tbl_standards), error = function(e) NULL)
+
+if (is.data.frame(df) && nrow(df) > 0) {
+  kblx(df, caption = "Standards")
+} else {
+  HTML("<p><em>No data in Standards table.</em></p>")
+}
+```
+
+---
+
+## Unknowns
+
+```{r unknowns, results='asis'}
+# Unknowns table with threshold calls and Sample_QC flags ----
+
+df <- tryCatch(as.data.frame(tbl_unknowns), error = function(e) NULL)
+
+if (is.data.frame(df) && nrow(df) > 0) {
+  kblx(df, caption = "Unknowns")
+} else {
+  HTML("<p><em>No data in Unknowns table.</em></p>")
+}
+```
